@@ -1,7 +1,13 @@
 # !diagnostics off
 
-
 rm(list=ls())
+options(scipen=999)
+
+# override table so that it always uses "NA"
+table <- function(..., useNA = "always") {
+  base::table(..., useNA = useNA)
+}
+
 
 options(scipen=999)
 options(java.parameters = "-Xmx4g")
@@ -16,18 +22,12 @@ source("src/00_functions.R")
 
 
 # LOAD DATA ---------------------------------------------------------------
-
 qog <- read_qog("standard", "time-series")
 qog$ISO <- qog$ccodealp
-
-
 
 vdem <- vdem
 vdem$ISO <- vdem$country_text_id
 vdem$country_text_id <- NULL
-
-
-
 vdem$v2x_regime1 <- ifelse(vdem$v2x_regime==0, "Closed autocracy",
                            ifelse(vdem$v2x_regime==1, "Electoral autocracy",
                                   ifelse(vdem$v2x_regime==2, "Electoral democracy", 
@@ -39,15 +39,8 @@ vdem$v2x_regime2 <- ifelse(vdem$v2x_regime==0 | vdem$v2x_regime==1, "Autocracy",
 vdem$v2x_regime2 <- relevel(as.factor(vdem$v2x_regime2) , ref = "Democracy")
 
 
-
-
-
-
 eci <- read.csv("https://www.dropbox.com/s/rfde1u2qk2ceirq/Country%20Complexity%20Rankings%201995%20-%202018.csv?dl=1")
-
 eci <- eci[,c(1,26:49)]
-  
-
 eci <- plyr::rename(eci, c(
               "ECI.2018" = "2018",
               "ECI.2017" = "2017",
@@ -76,9 +69,9 @@ eci <- plyr::rename(eci, c(
 
 
 eci <- reshape2::melt(eci)
-#eci <- plyr::rename(eci, c("variable" = "year",
-#                           "value" = "eci",
-#                           "country" = "country_name"))
+eci <- plyr::rename(eci, c("variable" = "year",
+                           "value" = "eci",
+                           "Country" = "country_name"))
 eci$year <- as.numeric(as.character(eci$year))
 eci$country_name[eci$country_name=="Myanmar"] <- "Burma/Myanmar"
 eci$country_name[eci$country_name=="CÃ´te d'Ivoire"] <- "Ivory Coast"
@@ -88,37 +81,11 @@ eci$country_name[eci$country_name=="North Macedonia"] <- "Macedonia"
 
 
 
-# BTI 2018
-tmp <- tempfile(fileext=".xlsx")
-download.file("https://www.dropbox.com/s/jw16u6p2i7h9z1o/BTI%202006-2020%20Scores.xlsx?dl=1",
-              destfile=tmp, mode="wb")
-bti2020 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2020", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2018 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2018", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2016 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2016", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2014 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2014", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2012 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2012", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2010 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2010", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2008 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2008", col_names = TRUE,col_types=NULL,na="",skip=0))
-bti2006 <- as.data.frame(readxl::read_excel(tmp, sheet="BTI 2006", col_names = TRUE,col_types=NULL,na="",skip=0))
+bti <- bti
+bti$bti_IGs <- bti$Q5.2_Interest_groups
 
-bti2020$year <- 2020
-bti2018$year <- 2018
-bti2016$year <- 2016
-bti2014$year <- 2014
-bti2012$year <- 2012
-bti2010$year <- 2010
-bti2008$year <- 2008
-bti2006$year <- 2006
-
-temp <- list(bti2006, bti2008, bti2010, bti2012, bti2014, bti2016, bti2018, bti2020)
-temp <- lapply(temp, function(x) {colnames(x)[1] <- 'countryname'; x}) 
-temp <- lapply(temp, function(x) {colnames(x)[grepl('Q14 | Steering Capability',colnames(x))] <- 'bti_steer'; x}) 
-temp <- lapply(temp, function(x) {colnames(x)[grepl('GII | Governance Performance',colnames(x))] <- 'bti_govperf'; x}) 
-temp <- lapply(temp, function(x) {colnames(x)[grepl('Q5.2 | Interest groups',colnames(x))] <- 'bti_IGs'; x}) 
-temp <- lapply(temp, subset, select = c("year", "countryname", "bti_steer", "bti_govperf", "bti_IGs"))
-temp <- lapply(temp, function(x) {colnames(x)[2] <- 'ISO'; x}) 
-
-
+bti$bti_steer <- bti$Q14_Steering_Capability
+bti$bti_govperf
 
 lookup <- list("Afghanistan" = "AFG",
                "Albania" = "ALB",
@@ -260,18 +227,15 @@ lookup <- list("Afghanistan" = "AFG",
 
 #dplyr::recode(bti2006$countryname, !!!lookup)
 
-for (i in 1:8){temp[[i]][[2]] <- dplyr::recode(temp[[i]][[2]], !!!lookup)}
+lookup_vector <- unlist(lookup)
+bti$ISO <- lookup_vector[bti$bti_country]
 
-bti <- rbind(as.data.frame(temp[[1]]),
-              as.data.frame(temp[[2]]),
-              as.data.frame(temp[[3]]),
-              as.data.frame(temp[[4]]),
-              as.data.frame(temp[[5]]),
-              as.data.frame(temp[[6]]),
-              as.data.frame(temp[[7]]),
-              as.data.frame(temp[[8]]))
-
-
+# Check if there are any unmatched countries
+unmatched <- bti$bti_country[is.na(bti$ISO)]
+if (length(unmatched) > 0) {
+  print("Unmatched country names:")
+  print(unique(unmatched))
+}
 
 
 # democracy indices
