@@ -238,30 +238,37 @@ if (length(unmatched) > 0) {
 }
 
 
-# democracy indices
-democracy_data <- generate_democracy_scores_dataset(output_format = "wide",verbose = FALSE)
-democracy_data <- as.data.frame((democracy_data))
-
-
 # Geddes personalism index
 personalism <- read.csv("https://www.dropbox.com/s/uk6gx11elg58suy/Geddes_personalism_index.csv?dl=1")
 
 
 
-
+# generlized index of economic complexity
 genepy <- read.csv("https://www.dropbox.com/s/sluss7kba7ztp1c/genepy_index_1995_2017.csv?dl=1")
 
-  
+# Transform the data
+genepy <- genepy %>%
+  pivot_longer(cols = -ISO,  # All columns except ISO
+               names_to = "year",  # New column for years
+               values_to = "genepy") %>%  # New column for values
+  mutate(year = as.integer(sub("X", "", year)))  # Remove 'X' prefix and convert to integer
+
+
+
+
+
 
 
 # MERGE -------------------------------------------------------------------
 
 merge <- merge(vdem, eci, by = c("country_name", "year"), all.x = T, all.y = F)
 merge <- merge(merge, bti, by = c("ISO", "year"), all.x = T, all.y = F)
-merge <- merge(merge, democracy_data, by.x = c("country_name", "year"), by.y = c("extended_country_name", "year"), all.x = T, all.y = F)
 merge <- merge(merge, personalism, by.x=c("cown", "year"), by.y = c("cowcode", "year"), all.x = T, all.y = F)
-
 merge <- merge(merge, qog, by = c("ISO","year"), all=T)
+merge <- merge(merge, genepy, by = c("ISO","year"), all=T)
+
+
+
 
 # WRITE -------------------------------------------------------------------
 
